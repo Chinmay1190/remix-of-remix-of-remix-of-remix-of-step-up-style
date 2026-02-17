@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { Package, Clock, CheckCircle, Truck, ArrowLeft, Download, MapPin, FileText } from "lucide-react";
+import { Package, Clock, CheckCircle, Truck, ArrowLeft, Download, MapPin, FileText, Calendar, Box, ChevronDown } from "lucide-react";
 import { Link, useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
@@ -43,10 +43,10 @@ interface Order {
 }
 
 const statusConfig = {
-  pending: { icon: Clock, color: "text-yellow-500", bg: "bg-yellow-500/10", label: "Pending" },
-  processing: { icon: Package, color: "text-blue-500", bg: "bg-blue-500/10", label: "Processing" },
-  shipped: { icon: Truck, color: "text-purple-500", bg: "bg-purple-500/10", label: "Shipped" },
-  delivered: { icon: CheckCircle, color: "text-green-500", bg: "bg-green-500/10", label: "Delivered" },
+  pending: { icon: Clock, color: "text-yellow-500", bg: "bg-yellow-500/10", border: "border-yellow-500/20", label: "Pending" },
+  processing: { icon: Package, color: "text-blue-500", bg: "bg-blue-500/10", border: "border-blue-500/20", label: "Processing" },
+  shipped: { icon: Truck, color: "text-purple-500", bg: "bg-purple-500/10", border: "border-purple-500/20", label: "Shipped" },
+  delivered: { icon: CheckCircle, color: "text-green-500", bg: "bg-green-500/10", border: "border-green-500/20", label: "Delivered" },
 };
 
 const statusOrder = ["pending", "processing", "shipped", "delivered"];
@@ -59,70 +59,95 @@ const generateInvoiceHTML = (order: Order, userName: string) => {
   const subtotal = order.items?.reduce((s, i) => s + i.price * i.quantity, 0) || 0;
   const shipping = order.total - subtotal;
   const addr = order.shipping_address;
+  const tax = Math.round(subtotal * 0.18);
 
   return `<!DOCTYPE html><html><head><meta charset="utf-8"><title>Invoice ${invoiceNo}</title>
 <style>
+@import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=Outfit:wght@300;400;500;600&display=swap');
 *{margin:0;padding:0;box-sizing:border-box}
-body{font-family:'Segoe UI',sans-serif;color:#1a1a2e;padding:40px;max-width:800px;margin:auto}
-.header{display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:40px;border-bottom:3px solid #1a1a2e;padding-bottom:20px}
-.logo{font-size:28px;font-weight:800;letter-spacing:-1px}
-.invoice-info{text-align:right;font-size:13px;color:#666}
-.invoice-info h2{color:#1a1a2e;font-size:18px;margin-bottom:8px}
-.addresses{display:flex;justify-content:space-between;margin-bottom:30px}
-.addr-block{font-size:13px;line-height:1.6}
-.addr-block h4{font-size:12px;text-transform:uppercase;letter-spacing:1px;color:#999;margin-bottom:4px}
-table{width:100%;border-collapse:collapse;margin-bottom:30px}
-th{background:#f8f8f8;padding:12px;text-align:left;font-size:12px;text-transform:uppercase;letter-spacing:0.5px;border-bottom:2px solid #eee}
-td{padding:12px;border-bottom:1px solid #f0f0f0;font-size:14px}
-.text-right{text-align:right}
-.totals{margin-left:auto;width:280px}
-.totals .row{display:flex;justify-content:space-between;padding:8px 0;font-size:14px}
-.totals .row.total{border-top:2px solid #1a1a2e;font-weight:700;font-size:16px;padding-top:12px;margin-top:4px}
-.footer{margin-top:50px;text-align:center;font-size:12px;color:#999;border-top:1px solid #eee;padding-top:20px}
+body{font-family:'Outfit',sans-serif;color:#1a1a2e;background:#fff}
+.invoice{max-width:800px;margin:0 auto;padding:48px}
+.header{display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:48px;padding-bottom:32px;border-bottom:2px solid #f0f0f0}
+.brand{display:flex;align-items:center;gap:12px}
+.brand-icon{width:48px;height:48px;background:linear-gradient(135deg,#e85d26,#f09030);border-radius:14px;display:flex;align-items:center;justify-content:center;color:white;font-family:'Space Grotesk',sans-serif;font-weight:700;font-size:20px}
+.brand-name{font-family:'Space Grotesk',sans-serif;font-size:24px;font-weight:700;letter-spacing:-0.5px}
+.invoice-meta{text-align:right}
+.invoice-badge{display:inline-block;background:linear-gradient(135deg,#e85d26,#f09030);color:white;font-family:'Space Grotesk',sans-serif;font-weight:600;font-size:13px;padding:6px 16px;border-radius:20px;letter-spacing:1px;margin-bottom:12px}
+.invoice-meta p{font-size:13px;color:#777;line-height:1.8}
+.invoice-meta strong{color:#1a1a2e}
+.addresses{display:grid;grid-template-columns:1fr 1fr;gap:40px;margin-bottom:40px}
+.addr-block{padding:24px;background:#fafafa;border-radius:16px;border:1px solid #f0f0f0}
+.addr-label{font-family:'Space Grotesk',sans-serif;font-size:11px;text-transform:uppercase;letter-spacing:2px;color:#999;margin-bottom:12px;font-weight:600}
+.addr-block p{font-size:14px;line-height:1.7;color:#555}
+.addr-block .name{font-weight:600;color:#1a1a2e;font-size:15px}
+table{width:100%;border-collapse:collapse;margin-bottom:32px}
+thead{background:#1a1a2e}
+th{padding:14px 16px;text-align:left;font-family:'Space Grotesk',sans-serif;font-size:12px;text-transform:uppercase;letter-spacing:1px;color:white;font-weight:600}
+th:last-child,th:nth-child(4),th:nth-child(5){text-align:right}
+td{padding:16px;border-bottom:1px solid #f5f5f5;font-size:14px;color:#555}
+td:last-child,td:nth-child(4),td:nth-child(5){text-align:right;font-weight:500}
+tr:hover td{background:#fafafa}
+.item-name{font-weight:600;color:#1a1a2e}
+.item-details{font-size:12px;color:#999;margin-top:2px}
+.summary{display:flex;justify-content:flex-end;margin-bottom:48px}
+.summary-box{width:320px;padding:24px;background:linear-gradient(135deg,#fef7f0,#fff5eb);border-radius:16px;border:1px solid #fde8d3}
+.summary-row{display:flex;justify-content:space-between;padding:8px 0;font-size:14px;color:#666}
+.summary-row.total{border-top:2px solid #e85d26;padding-top:16px;margin-top:8px;font-family:'Space Grotesk',sans-serif;font-weight:700;font-size:18px;color:#1a1a2e}
+.footer{text-align:center;padding-top:32px;border-top:1px solid #f0f0f0}
+.footer p{font-size:12px;color:#aaa;line-height:2}
+.footer .thanks{font-family:'Space Grotesk',sans-serif;font-size:16px;font-weight:600;color:#1a1a2e;margin-bottom:8px}
 </style></head><body>
+<div class="invoice">
 <div class="header">
-  <div class="logo">SNEAKERS</div>
-  <div class="invoice-info">
-    <h2>INVOICE</h2>
-    <p>${invoiceNo}</p>
+  <div class="brand">
+    <div class="brand-icon">S</div>
+    <div class="brand-name">SOLEMATE</div>
+  </div>
+  <div class="invoice-meta">
+    <div class="invoice-badge">INVOICE</div>
+    <p><strong>${invoiceNo}</strong></p>
     <p>Date: ${date}</p>
+    <p>Status: ${order.status.charAt(0).toUpperCase() + order.status.slice(1)}</p>
   </div>
 </div>
 <div class="addresses">
   <div class="addr-block">
-    <h4>Billed To</h4>
-    <p><strong>${userName}</strong></p>
-    ${addr ? `<p>${addr.street || ""}</p><p>${addr.city || ""}, ${addr.state || ""} ${addr.zip || ""}</p><p>${addr.country || ""}</p>` : ""}
+    <div class="addr-label">Billed To</div>
+    <p class="name">${userName}</p>
+    ${addr ? `<p>${addr.street || ""}<br/>${addr.city || ""}, ${addr.state || ""} ${addr.zip || ""}<br/>${addr.country || ""}</p>` : ""}
   </div>
-  <div class="addr-block" style="text-align:right">
-    <h4>From</h4>
-    <p><strong>Sneakers Store</strong></p>
-    <p>123 Fashion Street</p>
-    <p>Mumbai, MH 400001</p>
-    <p>India</p>
+  <div class="addr-block">
+    <div class="addr-label">From</div>
+    <p class="name">SOLEMATE Store</p>
+    <p>123 Fashion Street<br/>Mumbai, MH 400001<br/>India</p>
   </div>
 </div>
 <table>
-  <thead><tr><th>Item</th><th>Size</th><th>Color</th><th>Qty</th><th class="text-right">Price</th><th class="text-right">Total</th></tr></thead>
+  <thead><tr><th>#</th><th>Item</th><th>Size</th><th>Qty</th><th>Price</th><th>Total</th></tr></thead>
   <tbody>
-    ${order.items?.map(i => `<tr>
-      <td>${i.product_name}</td>
-      <td>${i.size}</td>
-      <td>${i.color}</td>
-      <td>${i.quantity}</td>
-      <td class="text-right">₹${Number(i.price).toLocaleString("en-IN")}</td>
-      <td class="text-right">₹${(Number(i.price) * i.quantity).toLocaleString("en-IN")}</td>
+    ${order.items?.map((i, idx) => `<tr>
+      <td>${idx + 1}</td>
+      <td><span class="item-name">${i.product_name}</span><div class="item-details">Color: ${i.color}</div></td>
+      <td>UK ${i.size}</td>
+      <td style="text-align:right">${i.quantity}</td>
+      <td style="text-align:right">₹${Number(i.price).toLocaleString("en-IN")}</td>
+      <td style="text-align:right;font-weight:600;color:#1a1a2e">₹${(Number(i.price) * i.quantity).toLocaleString("en-IN")}</td>
     </tr>`).join("") || ""}
   </tbody>
 </table>
-<div class="totals">
-  <div class="row"><span>Subtotal</span><span>₹${subtotal.toLocaleString("en-IN")}</span></div>
-  <div class="row"><span>Shipping</span><span>${shipping > 0 ? `₹${shipping.toLocaleString("en-IN")}` : "Free"}</span></div>
-  <div class="row total"><span>Total</span><span>₹${Number(order.total).toLocaleString("en-IN")}</span></div>
+<div class="summary">
+  <div class="summary-box">
+    <div class="summary-row"><span>Subtotal</span><span>₹${subtotal.toLocaleString("en-IN")}</span></div>
+    <div class="summary-row"><span>GST (18%)</span><span>₹${tax.toLocaleString("en-IN")}</span></div>
+    <div class="summary-row"><span>Shipping</span><span>${shipping > 0 ? `₹${shipping.toLocaleString("en-IN")}` : "Free"}</span></div>
+    <div class="summary-row total"><span>Total</span><span>₹${Number(order.total).toLocaleString("en-IN")}</span></div>
+  </div>
 </div>
 <div class="footer">
-  <p>Thank you for shopping with Sneakers!</p>
-  <p>For queries, contact support@sneakers.store</p>
+  <p class="thanks">Thank you for shopping with SOLEMATE! 🧡</p>
+  <p>Questions? Email us at support@solemate.store</p>
+  <p>This is a computer-generated invoice and does not require a signature.</p>
+</div>
 </div>
 </body></html>`;
 };
@@ -149,51 +174,30 @@ const Orders = () => {
   const [activeTab, setActiveTab] = useState<"details" | "tracking">("details");
 
   useEffect(() => {
-    if (!authLoading && !user) {
-      navigate("/auth");
-      return;
-    }
-
+    if (!authLoading && !user) { navigate("/auth"); return; }
     if (user) {
       fetchOrders();
-
       const channel = supabase
         .channel('orders')
-        .on('postgres_changes', {
-          event: '*', schema: 'public', table: 'orders',
-          filter: `user_id=eq.${user.id}`,
-        }, () => { fetchOrders(); })
-        .on('postgres_changes', {
-          event: '*', schema: 'public', table: 'order_tracking',
-        }, () => { fetchOrders(); })
+        .on('postgres_changes', { event: '*', schema: 'public', table: 'orders', filter: `user_id=eq.${user.id}` }, () => fetchOrders())
+        .on('postgres_changes', { event: '*', schema: 'public', table: 'order_tracking' }, () => fetchOrders())
         .subscribe();
-
       return () => { supabase.removeChannel(channel); };
     }
   }, [user, authLoading, navigate]);
 
   const fetchOrders = async () => {
     if (!user) return;
-
-    const { data: ordersData, error } = await supabase
-      .from("orders")
-      .select("*")
-      .eq("user_id", user.id)
-      .order("created_at", { ascending: false });
-
+    const { data: ordersData, error } = await supabase.from("orders").select("*").eq("user_id", user.id).order("created_at", { ascending: false });
     if (error) { console.error("Error fetching orders:", error); return; }
-
     const ordersWithItems: Order[] = await Promise.all(
       (ordersData || []).map(async (order) => {
         const [{ data: items }, { data: tracking }] = await Promise.all([
           supabase.from("order_items").select("*").eq("order_id", order.id),
           supabase.from("order_tracking").select("*").eq("order_id", order.id).order("created_at", { ascending: true }),
         ]);
-
         return {
-          id: order.id,
-          status: order.status,
-          total: order.total,
+          id: order.id, status: order.status, total: order.total,
           shipping_address: order.shipping_address as ShippingAddress | null,
           created_at: order.created_at,
           items: (items || []).map((item) => ({
@@ -201,13 +205,11 @@ const Orders = () => {
             size: Number(item.size), color: item.color, quantity: item.quantity, price: Number(item.price),
           })),
           tracking: (tracking || []).map((t) => ({
-            id: t.id, status: t.status, description: t.description,
-            location: t.location, created_at: t.created_at,
+            id: t.id, status: t.status, description: t.description, location: t.location, created_at: t.created_at,
           })),
         };
       })
     );
-
     setOrders(ordersWithItems);
     setLoading(false);
   };
@@ -221,7 +223,6 @@ const Orders = () => {
   }
 
   if (!user) return null;
-
   const userName = user.user_metadata?.full_name || user.email || "Customer";
 
   return (
@@ -231,17 +232,17 @@ const Orders = () => {
           <ArrowLeft className="w-4 h-4" /> Back to Home
         </Link>
 
-        <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }}>
+        <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="mb-8">
           <h1 className="font-display text-4xl font-bold tracking-tight mb-2">Order History</h1>
-          <p className="text-muted-foreground mb-8">{orders.length} orders</p>
+          <p className="text-muted-foreground">{orders.length} order{orders.length !== 1 ? "s" : ""}</p>
         </motion.div>
 
         {orders.length === 0 ? (
-          <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="text-center py-20">
-            <Package className="w-16 h-16 mx-auto text-muted-foreground/50 mb-4" />
-            <h2 className="font-display text-xl font-semibold mb-2">No orders yet</h2>
-            <p className="text-muted-foreground mb-6">Start shopping to see your orders here!</p>
-            <Link to="/products" className="inline-flex items-center gap-2 px-6 py-3 bg-primary text-primary-foreground rounded-full font-medium hover:scale-105 transition-transform">
+          <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="text-center py-20 rounded-3xl bg-secondary/50 border border-border">
+            <Box className="w-20 h-20 mx-auto text-muted-foreground/30 mb-6" />
+            <h2 className="font-display text-2xl font-bold mb-2">No orders yet</h2>
+            <p className="text-muted-foreground mb-8 max-w-sm mx-auto">Start shopping to see your orders here. We'll keep track of everything for you.</p>
+            <Link to="/products" className="inline-flex items-center gap-2 px-8 py-4 bg-primary text-primary-foreground rounded-full font-display font-semibold text-sm uppercase tracking-wider hover:scale-105 transition-transform btn-primary-glow">
               Browse Products
             </Link>
           </motion.div>
@@ -258,43 +259,49 @@ const Orders = () => {
                   initial={{ opacity: 0, y: 20 }}
                   animate={{ opacity: 1, y: 0 }}
                   transition={{ delay: index * 0.05 }}
-                  className="rounded-2xl bg-secondary p-6"
+                  className={`rounded-2xl border transition-all duration-300 ${isExpanded ? `bg-secondary/80 ${status.border} border-2` : "bg-secondary border-transparent hover:border-border"}`}
                 >
                   <button
                     onClick={() => { setExpandedOrder(isExpanded ? null : order.id); setActiveTab("details"); }}
-                    className="w-full text-left"
+                    className="w-full text-left p-6"
                   >
                     <div className="flex items-center justify-between mb-4">
-                      <div>
-                        <p className="text-xs text-muted-foreground mb-1">
-                          Order #{order.id.slice(0, 8).toUpperCase()}
-                        </p>
-                        <p className="font-display font-semibold">
-                          {new Date(order.created_at).toLocaleDateString("en-IN", {
-                            year: "numeric", month: "long", day: "numeric",
-                          })}
-                        </p>
+                      <div className="flex items-center gap-4">
+                        <div className={`w-12 h-12 rounded-xl ${status.bg} flex items-center justify-center`}>
+                          <StatusIcon className={`w-6 h-6 ${status.color}`} />
+                        </div>
+                        <div>
+                          <p className="font-display font-semibold">
+                            Order #{order.id.slice(0, 8).toUpperCase()}
+                          </p>
+                          <p className="text-xs text-muted-foreground flex items-center gap-1 mt-0.5">
+                            <Calendar className="w-3 h-3" />
+                            {new Date(order.created_at).toLocaleDateString("en-IN", { year: "numeric", month: "long", day: "numeric" })}
+                          </p>
+                        </div>
                       </div>
-                      <div className={`flex items-center gap-2 px-3 py-1.5 rounded-full ${status.bg}`}>
-                        <StatusIcon className={`w-4 h-4 ${status.color}`} />
-                        <span className={`text-sm font-medium ${status.color}`}>{status.label}</span>
+                      <div className="flex items-center gap-3">
+                        <div className={`hidden sm:flex items-center gap-1.5 px-3 py-1.5 rounded-full ${status.bg} border ${status.border}`}>
+                          <span className={`text-xs font-semibold ${status.color}`}>{status.label}</span>
+                        </div>
+                        <ChevronDown className={`w-5 h-5 text-muted-foreground transition-transform duration-300 ${isExpanded ? "rotate-180" : ""}`} />
                       </div>
                     </div>
 
                     <div className="flex items-center justify-between">
                       <div className="flex -space-x-3">
-                        {order.items?.slice(0, 3).map((item, i) => (
-                          <div key={i} className="w-12 h-12 rounded-xl border-2 border-secondary overflow-hidden">
+                        {order.items?.slice(0, 4).map((item, i) => (
+                          <div key={i} className="w-12 h-12 rounded-xl border-2 border-secondary overflow-hidden shadow-sm">
                             <img src={item.product_image || "/placeholder.svg"} alt={item.product_name} className="w-full h-full object-cover" />
                           </div>
                         ))}
-                        {(order.items?.length || 0) > 3 && (
-                          <div className="w-12 h-12 rounded-xl border-2 border-secondary bg-muted flex items-center justify-center text-xs font-medium">
-                            +{(order.items?.length || 0) - 3}
+                        {(order.items?.length || 0) > 4 && (
+                          <div className="w-12 h-12 rounded-xl border-2 border-secondary bg-muted flex items-center justify-center text-xs font-bold">
+                            +{(order.items?.length || 0) - 4}
                           </div>
                         )}
                       </div>
-                      <p className="font-display font-bold text-lg">{formatPrice(Number(order.total))}</p>
+                      <p className="font-display font-bold text-xl">{formatPrice(Number(order.total))}</p>
                     </div>
                   </button>
 
@@ -304,114 +311,145 @@ const Orders = () => {
                         initial={{ opacity: 0, height: 0 }}
                         animate={{ opacity: 1, height: "auto" }}
                         exit={{ opacity: 0, height: 0 }}
-                        className="mt-4 pt-4 border-t border-border overflow-hidden"
+                        className="px-6 pb-6 overflow-hidden"
                       >
-                        {/* Tabs */}
-                        <div className="flex gap-2 mb-4">
-                          <button
-                            onClick={() => setActiveTab("details")}
-                            className={`px-4 py-2 rounded-full text-sm font-medium transition-colors ${activeTab === "details" ? "bg-primary text-primary-foreground" : "bg-muted hover:bg-muted/80"}`}
-                          >
-                            <FileText className="w-4 h-4 inline mr-1" /> Details
-                          </button>
-                          <button
-                            onClick={() => setActiveTab("tracking")}
-                            className={`px-4 py-2 rounded-full text-sm font-medium transition-colors ${activeTab === "tracking" ? "bg-primary text-primary-foreground" : "bg-muted hover:bg-muted/80"}`}
-                          >
-                            <Truck className="w-4 h-4 inline mr-1" /> Track Order
-                          </button>
-                          <button
-                            onClick={() => downloadInvoice(order, userName)}
-                            className="ml-auto px-4 py-2 rounded-full text-sm font-medium bg-muted hover:bg-muted/80 transition-colors"
-                          >
-                            <Download className="w-4 h-4 inline mr-1" /> Invoice
-                          </button>
-                        </div>
-
-                        {activeTab === "details" && (
-                          <div>
-                            <div className="space-y-3">
-                              {order.items?.map((item) => (
-                                <div key={item.id} className="flex items-center gap-4">
-                                  <div className="w-16 h-16 rounded-xl overflow-hidden bg-muted">
-                                    <img src={item.product_image || "/placeholder.svg"} alt={item.product_name} className="w-full h-full object-cover" />
-                                  </div>
-                                  <div className="flex-1">
-                                    <p className="font-medium">{item.product_name}</p>
-                                    <p className="text-sm text-muted-foreground">Size {item.size} • {item.color} • Qty {item.quantity}</p>
-                                  </div>
-                                  <p className="font-display font-semibold">{formatPrice(Number(item.price))}</p>
-                                </div>
-                              ))}
-                            </div>
-
-                            {order.shipping_address && (
-                              <div className="mt-4 p-4 rounded-xl bg-muted/50">
-                                <p className="text-sm font-medium mb-1">Shipping Address</p>
-                                <p className="text-sm text-muted-foreground">
-                                  {order.shipping_address.street}<br />
-                                  {order.shipping_address.city}, {order.shipping_address.state} {order.shipping_address.zip}<br />
-                                  {order.shipping_address.country}
-                                </p>
-                              </div>
-                            )}
+                        <div className="pt-4 border-t border-border">
+                          {/* Tabs */}
+                          <div className="flex gap-2 mb-6">
+                            <button
+                              onClick={() => setActiveTab("details")}
+                              className={`px-5 py-2.5 rounded-xl text-sm font-semibold transition-all ${activeTab === "details" ? "bg-primary text-primary-foreground shadow-md" : "bg-muted hover:bg-muted/80"}`}
+                            >
+                              <FileText className="w-4 h-4 inline mr-1.5 -mt-0.5" /> Details
+                            </button>
+                            <button
+                              onClick={() => setActiveTab("tracking")}
+                              className={`px-5 py-2.5 rounded-xl text-sm font-semibold transition-all ${activeTab === "tracking" ? "bg-primary text-primary-foreground shadow-md" : "bg-muted hover:bg-muted/80"}`}
+                            >
+                              <Truck className="w-4 h-4 inline mr-1.5 -mt-0.5" /> Track Order
+                            </button>
+                            <button
+                              onClick={() => downloadInvoice(order, userName)}
+                              className="ml-auto px-5 py-2.5 rounded-xl text-sm font-semibold bg-primary/10 text-primary hover:bg-primary/20 transition-all flex items-center gap-1.5"
+                            >
+                              <Download className="w-4 h-4" /> Invoice
+                            </button>
                           </div>
-                        )}
 
-                        {activeTab === "tracking" && (
-                          <div>
-                            {/* Status progress bar */}
-                            <div className="flex items-center justify-between mb-6 px-2">
-                              {statusOrder.map((s, i) => {
-                                const cfg = statusConfig[s as keyof typeof statusConfig];
-                                const Icon = cfg.icon;
-                                const currentIdx = statusOrder.indexOf(order.status);
-                                const isCompleted = i <= currentIdx;
-                                const isActive = i === currentIdx;
-                                return (
-                                  <div key={s} className="flex flex-col items-center flex-1 relative">
-                                    {i > 0 && (
-                                      <div className={`absolute top-4 right-1/2 w-full h-0.5 -z-10 ${i <= currentIdx ? "bg-primary" : "bg-muted"}`} />
-                                    )}
-                                    <div className={`w-8 h-8 rounded-full flex items-center justify-center mb-1 ${isActive ? "bg-primary text-primary-foreground" : isCompleted ? "bg-primary/20 text-primary" : "bg-muted text-muted-foreground"}`}>
-                                      <Icon className="w-4 h-4" />
+                          {activeTab === "details" && (
+                            <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }}>
+                              <div className="space-y-3">
+                                {order.items?.map((item) => (
+                                  <div key={item.id} className="flex items-center gap-4 p-3 rounded-xl bg-background/50 hover:bg-background transition-colors">
+                                    <div className="w-16 h-16 rounded-xl overflow-hidden bg-muted flex-shrink-0">
+                                      <img src={item.product_image || "/placeholder.svg"} alt={item.product_name} className="w-full h-full object-cover" />
                                     </div>
-                                    <span className={`text-xs font-medium ${isActive ? "text-primary" : "text-muted-foreground"}`}>{cfg.label}</span>
-                                  </div>
-                                );
-                              })}
-                            </div>
-
-                            {/* Tracking timeline */}
-                            {order.tracking && order.tracking.length > 0 ? (
-                              <div className="space-y-0 relative ml-4">
-                                {order.tracking.map((event, i) => (
-                                  <div key={event.id} className="flex gap-4 pb-4 relative">
-                                    <div className="flex flex-col items-center">
-                                      <div className={`w-3 h-3 rounded-full ${i === order.tracking!.length - 1 ? "bg-primary" : "bg-muted-foreground/30"}`} />
-                                      {i < order.tracking!.length - 1 && <div className="w-0.5 flex-1 bg-muted-foreground/20" />}
+                                    <div className="flex-1 min-w-0">
+                                      <p className="font-semibold truncate">{item.product_name}</p>
+                                      <p className="text-sm text-muted-foreground">Size {item.size} • {item.color} • Qty {item.quantity}</p>
                                     </div>
-                                    <div className="pb-2">
-                                      <p className="font-medium text-sm">{event.description}</p>
-                                      <p className="text-xs text-muted-foreground">
-                                        {new Date(event.created_at).toLocaleDateString("en-IN", { month: "short", day: "numeric", year: "numeric" })}
-                                        {" • "}
-                                        {new Date(event.created_at).toLocaleTimeString("en-IN", { hour: "2-digit", minute: "2-digit" })}
-                                      </p>
-                                      {event.location && (
-                                        <p className="text-xs text-muted-foreground flex items-center gap-1 mt-0.5">
-                                          <MapPin className="w-3 h-3" /> {event.location}
-                                        </p>
-                                      )}
-                                    </div>
+                                    <p className="font-display font-bold text-lg flex-shrink-0">{formatPrice(Number(item.price))}</p>
                                   </div>
                                 ))}
                               </div>
-                            ) : (
-                              <p className="text-sm text-muted-foreground text-center py-4">No tracking updates yet.</p>
-                            )}
-                          </div>
-                        )}
+
+                              {order.shipping_address && (
+                                <div className="mt-4 p-4 rounded-xl bg-background/50 border border-border">
+                                  <div className="flex items-center gap-2 mb-2">
+                                    <MapPin className="w-4 h-4 text-primary" />
+                                    <p className="text-sm font-semibold">Shipping Address</p>
+                                  </div>
+                                  <p className="text-sm text-muted-foreground ml-6">
+                                    {order.shipping_address.street}, {order.shipping_address.city}, {order.shipping_address.state} {order.shipping_address.zip}, {order.shipping_address.country}
+                                  </p>
+                                </div>
+                              )}
+                            </motion.div>
+                          )}
+
+                          {activeTab === "tracking" && (
+                            <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }}>
+                              {/* Progress bar */}
+                              <div className="p-5 rounded-2xl bg-background/50 border border-border mb-6">
+                                <div className="flex items-center justify-between mb-3">
+                                  {statusOrder.map((s, i) => {
+                                    const cfg = statusConfig[s as keyof typeof statusConfig];
+                                    const Icon = cfg.icon;
+                                    const currentIdx = statusOrder.indexOf(order.status);
+                                    const isCompleted = i <= currentIdx;
+                                    const isActive = i === currentIdx;
+                                    return (
+                                      <div key={s} className="flex flex-col items-center flex-1 relative">
+                                        {i > 0 && (
+                                          <div className={`absolute top-5 right-1/2 w-full h-1 -z-10 rounded-full transition-colors ${i <= currentIdx ? "bg-primary" : "bg-muted"}`} />
+                                        )}
+                                        <motion.div
+                                          initial={false}
+                                          animate={{ scale: isActive ? 1.15 : 1 }}
+                                          className={`w-10 h-10 rounded-full flex items-center justify-center mb-2 transition-all ${
+                                            isActive ? "bg-primary text-primary-foreground shadow-lg ring-4 ring-primary/20" :
+                                            isCompleted ? "bg-primary/20 text-primary" : "bg-muted text-muted-foreground"
+                                          }`}
+                                        >
+                                          <Icon className="w-4 h-4" />
+                                        </motion.div>
+                                        <span className={`text-xs font-semibold ${isActive ? "text-primary" : isCompleted ? "text-foreground" : "text-muted-foreground"}`}>{cfg.label}</span>
+                                      </div>
+                                    );
+                                  })}
+                                </div>
+                              </div>
+
+                              {/* Timeline */}
+                              {order.tracking && order.tracking.length > 0 ? (
+                                <div className="space-y-0 relative ml-2">
+                                  {order.tracking.map((event, i) => {
+                                    const isLast = i === order.tracking!.length - 1;
+                                    return (
+                                      <div key={event.id} className="flex gap-4 pb-1 relative">
+                                        <div className="flex flex-col items-center">
+                                          <motion.div
+                                            initial={{ scale: 0 }}
+                                            animate={{ scale: 1 }}
+                                            transition={{ delay: i * 0.1 }}
+                                            className={`w-4 h-4 rounded-full border-2 flex-shrink-0 ${isLast ? "bg-primary border-primary shadow-md shadow-primary/30" : "bg-background border-muted-foreground/30"}`}
+                                          />
+                                          {!isLast && <div className="w-0.5 h-full min-h-[32px] bg-muted-foreground/15" />}
+                                        </div>
+                                        <motion.div
+                                          initial={{ opacity: 0, x: -10 }}
+                                          animate={{ opacity: 1, x: 0 }}
+                                          transition={{ delay: i * 0.1 }}
+                                          className={`pb-5 flex-1 ${isLast ? "" : ""}`}
+                                        >
+                                          <p className={`font-semibold text-sm ${isLast ? "text-primary" : ""}`}>{event.description}</p>
+                                          <div className="flex items-center gap-3 mt-1">
+                                            <p className="text-xs text-muted-foreground">
+                                              {new Date(event.created_at).toLocaleDateString("en-IN", { month: "short", day: "numeric", year: "numeric" })}
+                                              {" • "}
+                                              {new Date(event.created_at).toLocaleTimeString("en-IN", { hour: "2-digit", minute: "2-digit" })}
+                                            </p>
+                                            {event.location && (
+                                              <p className="text-xs text-muted-foreground flex items-center gap-1 bg-muted px-2 py-0.5 rounded-full">
+                                                <MapPin className="w-3 h-3" /> {event.location}
+                                              </p>
+                                            )}
+                                          </div>
+                                        </motion.div>
+                                      </div>
+                                    );
+                                  })}
+                                </div>
+                              ) : (
+                                <div className="text-center py-8 rounded-xl bg-background/50 border border-border">
+                                  <Truck className="w-10 h-10 mx-auto text-muted-foreground/30 mb-3" />
+                                  <p className="text-sm text-muted-foreground font-medium">No tracking updates yet</p>
+                                  <p className="text-xs text-muted-foreground mt-1">We'll update this once your order ships</p>
+                                </div>
+                              )}
+                            </motion.div>
+                          )}
+                        </div>
                       </motion.div>
                     )}
                   </AnimatePresence>
