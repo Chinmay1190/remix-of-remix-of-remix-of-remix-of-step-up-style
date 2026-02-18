@@ -26,6 +26,9 @@ const Checkout = () => {
   const [orderDetails, setOrderDetails] = useState<{
     orderId: string;
     items: typeof items;
+    subtotal: number;
+    gst: number;
+    shipping: number;
     total: number;
     paymentMethod: string;
     shippingAddress: {
@@ -150,7 +153,10 @@ const Checkout = () => {
     
     setLoading(true);
     const orderId = generateOrderId();
-    const finalTotal = totalPrice + (totalPrice > FREE_SHIPPING_THRESHOLD ? 0 : SHIPPING_COST);
+    const subtotal = totalPrice;
+    const gst = Math.round(subtotal * 0.18);
+    const shipping = subtotal > FREE_SHIPPING_THRESHOLD ? 0 : SHIPPING_COST;
+    const finalTotal = subtotal + gst + shipping;
 
     try {
       if (user) {
@@ -197,6 +203,9 @@ const Checkout = () => {
       setOrderDetails({
         orderId,
         items: [...items],
+        subtotal,
+        gst,
+        shipping,
         total: finalTotal,
         paymentMethod,
         shippingAddress: {
