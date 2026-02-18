@@ -17,6 +17,9 @@ interface OrderDetails {
     quantity: number;
     price: number;
   }>;
+  subtotal: number;
+  gst: number;
+  shipping: number;
   total: number;
   paymentMethod: string;
   shippingAddress: {
@@ -238,7 +241,7 @@ const OrderSuccess = ({ orderDetails, isLoggedIn }: OrderSuccessProps) => {
           </div>
         </motion.div>
 
-        {/* Order Items */}
+        {/* Order Items & Price Breakdown */}
         <motion.div
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
@@ -263,6 +266,26 @@ const OrderSuccess = ({ orderDetails, isLoggedIn }: OrderSuccessProps) => {
                 </div>
               </div>
             ))}
+          </div>
+
+          {/* Price Breakdown */}
+          <div className="mt-6 pt-6 border-t border-border space-y-3">
+            <div className="flex justify-between text-sm text-muted-foreground">
+              <span>Subtotal</span>
+              <span>{formatPrice(orderDetails.subtotal)}</span>
+            </div>
+            <div className="flex justify-between text-sm text-muted-foreground">
+              <span>GST (18%)</span>
+              <span>{formatPrice(orderDetails.gst)}</span>
+            </div>
+            <div className="flex justify-between text-sm text-muted-foreground">
+              <span>Shipping</span>
+              <span>{orderDetails.shipping > 0 ? formatPrice(orderDetails.shipping) : <span className="text-green-500 font-medium">Free</span>}</span>
+            </div>
+            <div className="flex justify-between pt-3 border-t border-border font-display font-bold text-lg">
+              <span>Total</span>
+              <span>{formatPrice(orderDetails.total)}</span>
+            </div>
           </div>
         </motion.div>
 

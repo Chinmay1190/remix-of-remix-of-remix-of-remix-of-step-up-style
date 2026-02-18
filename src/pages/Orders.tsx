@@ -57,9 +57,10 @@ const generateInvoiceHTML = (order: Order, userName: string) => {
   });
   const invoiceNo = `INV-${order.id.slice(0, 8).toUpperCase()}`;
   const subtotal = order.items?.reduce((s, i) => s + i.price * i.quantity, 0) || 0;
-  const shipping = order.total - subtotal;
+  const gst = Math.round(subtotal * 0.18);
+  const grandTotal = Number(order.total);
+  const shipping = Math.max(0, grandTotal - subtotal - gst);
   const addr = order.shipping_address;
-  const tax = Math.round(subtotal * 0.18);
 
   return `<!DOCTYPE html><html><head><meta charset="utf-8"><title>Invoice ${invoiceNo}</title>
 <style>
@@ -138,9 +139,10 @@ tr:hover td{background:#fafafa}
 <div class="summary">
   <div class="summary-box">
     <div class="summary-row"><span>Subtotal</span><span>₹${subtotal.toLocaleString("en-IN")}</span></div>
-    <div class="summary-row"><span>GST (18%)</span><span>₹${tax.toLocaleString("en-IN")}</span></div>
+    <div class="summary-row"><span>CGST (9%)</span><span>₹${Math.round(gst / 2).toLocaleString("en-IN")}</span></div>
+    <div class="summary-row"><span>SGST (9%)</span><span>₹${Math.round(gst / 2).toLocaleString("en-IN")}</span></div>
     <div class="summary-row"><span>Shipping</span><span>${shipping > 0 ? `₹${shipping.toLocaleString("en-IN")}` : "Free"}</span></div>
-    <div class="summary-row total"><span>Total</span><span>₹${Number(order.total).toLocaleString("en-IN")}</span></div>
+    <div class="summary-row total"><span>Grand Total</span><span>₹${grandTotal.toLocaleString("en-IN")}</span></div>
   </div>
 </div>
 <div class="footer">
@@ -351,6 +353,32 @@ const Orders = () => {
                                     <p className="font-display font-bold text-lg flex-shrink-0">{formatPrice(Number(item.price))}</p>
                                   </div>
                                 ))}
+                              </div>
+
+                              {/* Price Breakdown */}
+                              <div className="mt-4 p-4 rounded-xl bg-background/50 border border-border space-y-2">
+                                {(() => {
+                                  const subtotal = order.items?.reduce((s, i) => s + i.price * i.quantity, 0) || 0;
+                                  const gst = Math.round(subtotal * 0.18);
+                                  const grandTotal = Number(order.total);
+                                  const shippingCost = Math.max(0, grandTotal - subtotal - gst);
+                                  return (
+                                    <>
+                                      <div className="flex justify-between text-sm text-muted-foreground">
+                                        <span>Subtotal</span><span>{formatPrice(subtotal)}</span>
+                                      </div>
+                                      <div className="flex justify-between text-sm text-muted-foreground">
+                                        <span>GST (18%)</span><span>{formatPrice(gst)}</span>
+                                      </div>
+                                      <div className="flex justify-between text-sm text-muted-foreground">
+                                        <span>Shipping</span><span>{shippingCost > 0 ? formatPrice(shippingCost) : <span className="text-green-500 font-medium">Free</span>}</span>
+                                      </div>
+                                      <div className="flex justify-between pt-2 border-t border-border font-display font-bold">
+                                        <span>Grand Total</span><span>{formatPrice(grandTotal)}</span>
+                                      </div>
+                                    </>
+                                  );
+                                })()}
                               </div>
 
                               {order.shipping_address && (
