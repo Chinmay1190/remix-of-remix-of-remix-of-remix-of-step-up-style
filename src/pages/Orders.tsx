@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { Package, Clock, CheckCircle, Truck, ArrowLeft, Download, MapPin, FileText, Calendar, Box, ChevronDown } from "lucide-react";
+import { Package, Clock, CheckCircle, Truck, ArrowLeft, Download, MapPin, FileText, Calendar, Box, ChevronDown, RefreshCw, ShieldCheck, CircleDot } from "lucide-react";
 import { Link, useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
@@ -396,85 +396,222 @@ const Orders = () => {
                           )}
 
                           {activeTab === "tracking" && (
-                            <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }}>
-                              {/* Progress bar */}
-                              <div className="p-5 rounded-2xl bg-background/50 border border-border mb-6">
-                                <div className="flex items-center justify-between mb-3">
-                                  {statusOrder.map((s, i) => {
-                                    const cfg = statusConfig[s as keyof typeof statusConfig];
-                                    const Icon = cfg.icon;
-                                    const currentIdx = statusOrder.indexOf(order.status);
-                                    const isCompleted = i <= currentIdx;
-                                    const isActive = i === currentIdx;
-                                    return (
-                                      <div key={s} className="flex flex-col items-center flex-1 relative">
-                                        {i > 0 && (
-                                          <div className={`absolute top-5 right-1/2 w-full h-1 -z-10 rounded-full transition-colors ${i <= currentIdx ? "bg-primary" : "bg-muted"}`} />
-                                        )}
-                                        <motion.div
-                                          initial={false}
-                                          animate={{ scale: isActive ? 1.15 : 1 }}
-                                          className={`w-10 h-10 rounded-full flex items-center justify-center mb-2 transition-all ${
-                                            isActive ? "bg-primary text-primary-foreground shadow-lg ring-4 ring-primary/20" :
-                                            isCompleted ? "bg-primary/20 text-primary" : "bg-muted text-muted-foreground"
-                                          }`}
-                                        >
-                                          <Icon className="w-4 h-4" />
-                                        </motion.div>
-                                        <span className={`text-xs font-semibold ${isActive ? "text-primary" : isCompleted ? "text-foreground" : "text-muted-foreground"}`}>{cfg.label}</span>
-                                      </div>
-                                    );
-                                  })}
-                                </div>
-                              </div>
+                            <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="space-y-5">
+                              {/* Status Summary Card */}
+                              {(() => {
+                                const currentIdx = statusOrder.indexOf(order.status);
+                                const progressPercent = Math.round(((currentIdx + 1) / statusOrder.length) * 100);
+                                const orderDate = new Date(order.created_at);
+                                const estimatedDelivery = new Date(orderDate);
+                                estimatedDelivery.setDate(estimatedDelivery.getDate() + (order.status === "delivered" ? 0 : order.status === "shipped" ? 2 : order.status === "processing" ? 5 : 7));
+                                const currentStatus = statusConfig[order.status as keyof typeof statusConfig] || statusConfig.pending;
 
-                              {/* Timeline */}
-                              {order.tracking && order.tracking.length > 0 ? (
-                                <div className="space-y-0 relative ml-2">
-                                  {order.tracking.map((event, i) => {
-                                    const isLast = i === order.tracking!.length - 1;
-                                    return (
-                                      <div key={event.id} className="flex gap-4 pb-1 relative">
-                                        <div className="flex flex-col items-center">
-                                          <motion.div
-                                            initial={{ scale: 0 }}
-                                            animate={{ scale: 1 }}
-                                            transition={{ delay: i * 0.1 }}
-                                            className={`w-4 h-4 rounded-full border-2 flex-shrink-0 ${isLast ? "bg-primary border-primary shadow-md shadow-primary/30" : "bg-background border-muted-foreground/30"}`}
-                                          />
-                                          {!isLast && <div className="w-0.5 h-full min-h-[32px] bg-muted-foreground/15" />}
+                                return (
+                                  <div className="p-5 rounded-2xl bg-background/50 border border-border">
+                                    {/* Top info row */}
+                                    <div className="flex items-center justify-between mb-5">
+                                      <div className="flex items-center gap-3">
+                                        <div className={`w-11 h-11 rounded-xl ${currentStatus.bg} flex items-center justify-center`}>
+                                          <currentStatus.icon className={`w-5 h-5 ${currentStatus.color}`} />
                                         </div>
+                                        <div>
+                                          <p className="font-display font-bold text-sm">{currentStatus.label}</p>
+                                          <p className="text-xs text-muted-foreground">
+                                            {order.status === "delivered" ? "Delivered on " : "Est. delivery: "}
+                                            {estimatedDelivery.toLocaleDateString("en-IN", { month: "short", day: "numeric", year: "numeric" })}
+                                          </p>
+                                        </div>
+                                      </div>
+                                      <div className="text-right">
+                                        <p className="font-display font-bold text-2xl text-primary">{progressPercent}%</p>
+                                        <p className="text-xs text-muted-foreground">Complete</p>
+                                      </div>
+                                    </div>
+
+                                    {/* Animated progress bar */}
+                                    <div className="relative h-2.5 w-full rounded-full bg-muted overflow-hidden mb-6">
+                                      <motion.div
+                                        initial={{ width: 0 }}
+                                        animate={{ width: `${progressPercent}%` }}
+                                        transition={{ duration: 1, ease: "easeOut" }}
+                                        className="absolute inset-y-0 left-0 rounded-full bg-primary"
+                                      />
+                                      {order.status !== "delivered" && (
                                         <motion.div
-                                          initial={{ opacity: 0, x: -10 }}
-                                          animate={{ opacity: 1, x: 0 }}
-                                          transition={{ delay: i * 0.1 }}
-                                          className={`pb-5 flex-1 ${isLast ? "" : ""}`}
-                                        >
-                                          <p className={`font-semibold text-sm ${isLast ? "text-primary" : ""}`}>{event.description}</p>
-                                          <div className="flex items-center gap-3 mt-1">
-                                            <p className="text-xs text-muted-foreground">
-                                              {new Date(event.created_at).toLocaleDateString("en-IN", { month: "short", day: "numeric", year: "numeric" })}
-                                              {" • "}
-                                              {new Date(event.created_at).toLocaleTimeString("en-IN", { hour: "2-digit", minute: "2-digit" })}
-                                            </p>
-                                            {event.location && (
-                                              <p className="text-xs text-muted-foreground flex items-center gap-1 bg-muted px-2 py-0.5 rounded-full">
-                                                <MapPin className="w-3 h-3" /> {event.location}
-                                              </p>
+                                          initial={{ opacity: 0 }}
+                                          animate={{ opacity: [0.4, 1, 0.4] }}
+                                          transition={{ duration: 1.5, repeat: Infinity }}
+                                          className="absolute inset-y-0 rounded-full bg-primary/30"
+                                          style={{ left: `${Math.max(0, progressPercent - 8)}%`, width: "8%" }}
+                                        />
+                                      )}
+                                    </div>
+
+                                    {/* Status stepper */}
+                                    <div className="grid grid-cols-4 gap-0">
+                                      {statusOrder.map((s, i) => {
+                                        const cfg = statusConfig[s as keyof typeof statusConfig];
+                                        const Icon = cfg.icon;
+                                        const isCompleted = i < currentIdx;
+                                        const isActive = i === currentIdx;
+                                        const isPending = i > currentIdx;
+
+                                        return (
+                                          <div key={s} className="flex flex-col items-center text-center relative">
+                                            <motion.div
+                                              initial={false}
+                                              animate={{
+                                                scale: isActive ? 1 : 1,
+                                                boxShadow: isActive ? "0 0 0 6px hsla(12, 90%, 58%, 0.15)" : "0 0 0 0px transparent",
+                                              }}
+                                              className={`w-10 h-10 rounded-full flex items-center justify-center mb-2 transition-colors relative ${
+                                                isActive ? "bg-primary text-primary-foreground" :
+                                                isCompleted ? "bg-primary/20 text-primary" :
+                                                "bg-muted text-muted-foreground"
+                                              }`}
+                                            >
+                                              {isCompleted ? <CheckCircle className="w-5 h-5" /> : <Icon className="w-4 h-4" />}
+                                              {isActive && order.status !== "delivered" && (
+                                                <motion.span
+                                                  animate={{ scale: [1, 1.8, 1], opacity: [0.6, 0, 0.6] }}
+                                                  transition={{ duration: 2, repeat: Infinity }}
+                                                  className="absolute inset-0 rounded-full border-2 border-primary"
+                                                />
+                                              )}
+                                            </motion.div>
+                                            <span className={`text-[11px] font-semibold leading-tight ${
+                                              isActive ? "text-primary" : isCompleted ? "text-foreground" : "text-muted-foreground"
+                                            }`}>
+                                              {cfg.label}
+                                            </span>
+                                          </div>
+                                        );
+                                      })}
+                                    </div>
+                                  </div>
+                                );
+                              })()}
+
+                              {/* Live Tracking Timeline */}
+                              {order.tracking && order.tracking.length > 0 ? (
+                                <div className="p-5 rounded-2xl bg-background/50 border border-border">
+                                  <div className="flex items-center justify-between mb-4">
+                                    <h4 className="font-display font-bold text-sm flex items-center gap-2">
+                                      <CircleDot className="w-4 h-4 text-primary" />
+                                      Tracking Timeline
+                                    </h4>
+                                    <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
+                                      <RefreshCw className="w-3 h-3" />
+                                      <span>Live updates</span>
+                                      <span className="relative flex h-2 w-2 ml-1">
+                                        <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-primary opacity-75"></span>
+                                        <span className="relative inline-flex rounded-full h-2 w-2 bg-primary"></span>
+                                      </span>
+                                    </div>
+                                  </div>
+
+                                  <div className="space-y-0 relative ml-1">
+                                    {[...order.tracking].reverse().map((event, i) => {
+                                      const isFirst = i === 0;
+                                      const isLast = i === order.tracking!.length - 1;
+                                      const eventStatus = statusConfig[event.status as keyof typeof statusConfig];
+                                      const EventIcon = eventStatus?.icon || Clock;
+                                      const eventDate = new Date(event.created_at);
+                                      const now = new Date();
+                                      const diffMs = now.getTime() - eventDate.getTime();
+                                      const diffMins = Math.floor(diffMs / 60000);
+                                      const diffHours = Math.floor(diffMins / 60);
+                                      const diffDays = Math.floor(diffHours / 24);
+                                      let timeAgo = "";
+                                      if (diffDays > 0) timeAgo = `${diffDays}d ago`;
+                                      else if (diffHours > 0) timeAgo = `${diffHours}h ago`;
+                                      else if (diffMins > 0) timeAgo = `${diffMins}m ago`;
+                                      else timeAgo = "Just now";
+
+                                      return (
+                                        <div key={event.id} className="flex gap-4 relative">
+                                          <div className="flex flex-col items-center">
+                                            <motion.div
+                                              initial={{ scale: 0, opacity: 0 }}
+                                              animate={{ scale: 1, opacity: 1 }}
+                                              transition={{ delay: i * 0.08 }}
+                                              className={`w-9 h-9 rounded-full flex items-center justify-center flex-shrink-0 relative ${
+                                                isFirst
+                                                  ? "bg-primary text-primary-foreground shadow-md"
+                                                  : "bg-muted text-muted-foreground"
+                                              }`}
+                                            >
+                                              <EventIcon className="w-4 h-4" />
+                                              {isFirst && order.status !== "delivered" && (
+                                                <motion.span
+                                                  animate={{ scale: [1, 1.6, 1], opacity: [0.5, 0, 0.5] }}
+                                                  transition={{ duration: 2, repeat: Infinity }}
+                                                  className="absolute inset-0 rounded-full border-2 border-primary"
+                                                />
+                                              )}
+                                            </motion.div>
+                                            {!isLast && (
+                                              <div className={`w-0.5 h-full min-h-[28px] ${isFirst ? "bg-primary/30" : "bg-muted-foreground/15"}`} />
                                             )}
                                           </div>
-                                        </motion.div>
-                                      </div>
-                                    );
-                                  })}
+                                          <motion.div
+                                            initial={{ opacity: 0, x: -15 }}
+                                            animate={{ opacity: 1, x: 0 }}
+                                            transition={{ delay: i * 0.08 }}
+                                            className={`pb-5 flex-1 ${isFirst ? "" : "opacity-70"}`}
+                                          >
+                                            <div className="flex items-start justify-between">
+                                              <div>
+                                                <p className={`font-semibold text-sm ${isFirst ? "text-foreground" : "text-muted-foreground"}`}>
+                                                  {event.description}
+                                                </p>
+                                                <div className="flex flex-wrap items-center gap-2 mt-1.5">
+                                                  <p className="text-xs text-muted-foreground">
+                                                    {eventDate.toLocaleDateString("en-IN", { month: "short", day: "numeric" })}
+                                                    {" • "}
+                                                    {eventDate.toLocaleTimeString("en-IN", { hour: "2-digit", minute: "2-digit" })}
+                                                  </p>
+                                                  {event.location && (
+                                                    <span className="text-xs text-muted-foreground flex items-center gap-1 bg-muted px-2 py-0.5 rounded-full">
+                                                      <MapPin className="w-3 h-3" /> {event.location}
+                                                    </span>
+                                                  )}
+                                                </div>
+                                              </div>
+                                              <span className={`text-[10px] font-medium px-2 py-0.5 rounded-full whitespace-nowrap ${
+                                                isFirst ? "bg-primary/10 text-primary" : "bg-muted text-muted-foreground"
+                                              }`}>
+                                                {timeAgo}
+                                              </span>
+                                            </div>
+                                          </motion.div>
+                                        </div>
+                                      );
+                                    })}
+                                  </div>
                                 </div>
                               ) : (
-                                <div className="text-center py-8 rounded-xl bg-background/50 border border-border">
-                                  <Truck className="w-10 h-10 mx-auto text-muted-foreground/30 mb-3" />
-                                  <p className="text-sm text-muted-foreground font-medium">No tracking updates yet</p>
-                                  <p className="text-xs text-muted-foreground mt-1">We'll update this once your order ships</p>
+                                <div className="text-center py-10 rounded-2xl bg-background/50 border border-border">
+                                  <div className="relative w-16 h-16 mx-auto mb-4">
+                                    <Truck className="w-16 h-16 text-muted-foreground/20" />
+                                    <motion.div
+                                      animate={{ scale: [1, 1.3, 1], opacity: [0.3, 0.6, 0.3] }}
+                                      transition={{ duration: 2, repeat: Infinity }}
+                                      className="absolute -top-1 -right-1 w-5 h-5 rounded-full bg-primary/20 flex items-center justify-center"
+                                    >
+                                      <span className="w-2 h-2 rounded-full bg-primary" />
+                                    </motion.div>
+                                  </div>
+                                  <p className="font-display font-semibold text-sm">Waiting for tracking updates</p>
+                                  <p className="text-xs text-muted-foreground mt-1 max-w-xs mx-auto">We'll start updating once your order is picked up by our shipping partner.</p>
                                 </div>
                               )}
+
+                              {/* Secure note */}
+                              <div className="flex items-center gap-2 px-4 py-3 rounded-xl bg-muted/50 border border-border">
+                                <ShieldCheck className="w-4 h-4 text-primary flex-shrink-0" />
+                                <p className="text-[11px] text-muted-foreground">Your order is tracked securely in real-time. Updates appear automatically as your package moves.</p>
+                              </div>
                             </motion.div>
                           )}
                         </div>
