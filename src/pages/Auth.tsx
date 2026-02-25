@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { Eye, EyeOff, Mail, Lock, User, Loader2, ShoppingBag, ArrowRight, CheckCircle2 } from "lucide-react";
 import { toast } from "sonner";
@@ -24,8 +24,13 @@ const Auth = () => {
   const navigate = useNavigate();
   const { signIn, signUp, user } = useAuth();
 
+  useEffect(() => {
+    if (user) {
+      navigate("/", { replace: true });
+    }
+  }, [user, navigate]);
+
   if (user) {
-    navigate("/");
     return null;
   }
 
