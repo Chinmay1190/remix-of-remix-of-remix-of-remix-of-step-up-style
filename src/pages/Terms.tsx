@@ -1,5 +1,5 @@
 import { motion } from "framer-motion";
-import { FileText, ShoppingCart, CreditCard, Truck, AlertTriangle, Scale } from "lucide-react";
+import { FileText, ShoppingCart, CreditCard, Truck, AlertTriangle, Scale, CheckCircle2 } from "lucide-react";
 
 const sections = [
   {
@@ -61,60 +61,83 @@ We are not responsible for delays or failures in performance resulting from circ
 
 const Terms = () => {
   return (
-    <main className="pt-24 pb-16 section-padding">
-      <div className="max-w-4xl mx-auto">
-        <motion.div
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          className="text-center mb-12"
-        >
-          <span className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full bg-primary/10 text-primary text-sm font-medium mb-4">
-            <Scale className="w-4 h-4" /> Legal Agreement
-          </span>
-          <h1 className="font-display text-4xl sm:text-5xl font-bold tracking-tight mb-4">
-            Terms & Conditions
-          </h1>
-          <p className="text-muted-foreground max-w-2xl mx-auto">
-            Please read these terms carefully before using our services. By using SOLEMATE, you agree to these terms.
-          </p>
-          <p className="text-sm text-muted-foreground mt-4">
-            Effective Date: February 6, 2026
-          </p>
-        </motion.div>
-
-        <div className="space-y-6">
-          {sections.map((section, index) => (
-            <motion.div
-              key={section.title}
-              initial={{ opacity: 0, y: 20 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ delay: index * 0.1 }}
-              className="p-6 rounded-2xl bg-secondary"
+    <main className="pt-24 pb-16">
+      <section className="section-padding py-20 relative overflow-hidden">
+        <div className="absolute inset-0 bg-gradient-to-br from-primary/5 via-transparent to-primary/10 pointer-events-none" />
+        <div className="max-w-4xl mx-auto relative">
+          <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="text-center mb-16">
+            <motion.span
+              initial={{ opacity: 0, scale: 0.9 }}
+              animate={{ opacity: 1, scale: 1 }}
+              className="inline-flex items-center gap-2 px-5 py-2 rounded-full bg-primary/10 text-primary text-sm font-semibold mb-6"
             >
-              <div className="flex items-center gap-3 mb-4">
-                <div className="w-10 h-10 rounded-full bg-primary/10 flex items-center justify-center">
-                  <section.icon className="w-5 h-5 text-primary" />
-                </div>
-                <h2 className="font-display text-xl font-semibold">{section.title}</h2>
-              </div>
-              <div className="text-muted-foreground text-sm whitespace-pre-line leading-relaxed">
-                {section.content}
-              </div>
-            </motion.div>
-          ))}
-        </div>
+              <Scale className="w-4 h-4" /> Legal Agreement
+            </motion.span>
+            <h1 className="font-display text-5xl sm:text-6xl font-bold tracking-tight mb-4">
+              Terms & <span className="text-gradient">Conditions</span>
+            </h1>
+            <p className="text-muted-foreground max-w-2xl mx-auto text-lg">
+              Please read these terms carefully before using our services.
+            </p>
+            <p className="text-sm text-muted-foreground mt-4">
+              Effective Date: February 25, 2026
+            </p>
+          </motion.div>
 
-        <motion.div
-          initial={{ opacity: 0 }}
-          animate={{ opacity: 1 }}
-          transition={{ delay: 0.7 }}
-          className="mt-12 p-6 rounded-2xl bg-muted text-center"
-        >
-          <p className="text-sm text-muted-foreground">
-            By continuing to use SOLEMATE, you acknowledge that you have read, understood, and agree to be bound by these Terms and Conditions.
-          </p>
-        </motion.div>
-      </div>
+          {/* Table of Contents */}
+          <motion.div
+            initial={{ opacity: 0, y: 10 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.15 }}
+            className="p-6 rounded-2xl bg-secondary/80 border border-border/50 mb-12"
+          >
+            <h3 className="font-display font-bold mb-3 text-sm uppercase tracking-wider text-muted-foreground">Table of Contents</h3>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+              {sections.map((s, i) => (
+                <div key={i} className="flex items-center gap-2 text-sm text-muted-foreground">
+                  <CheckCircle2 className="w-3.5 h-3.5 text-primary shrink-0" />
+                  <span>{s.title}</span>
+                </div>
+              ))}
+            </div>
+          </motion.div>
+
+          <div className="space-y-6">
+            {sections.map((section, index) => (
+              <motion.div
+                key={section.title}
+                initial={{ opacity: 0, y: 20 }}
+                whileInView={{ opacity: 1, y: 0 }}
+                viewport={{ once: true }}
+                transition={{ delay: index * 0.05 }}
+                className="p-8 rounded-2xl bg-secondary/80 border border-border/50"
+              >
+                <div className="flex items-center gap-4 mb-5">
+                  <div className="w-12 h-12 rounded-2xl bg-primary/10 flex items-center justify-center">
+                    <section.icon className="w-6 h-6 text-primary" />
+                  </div>
+                  <h2 className="font-display text-xl font-bold">{section.title}</h2>
+                </div>
+                <div className="text-muted-foreground text-sm whitespace-pre-line leading-relaxed pl-1">
+                  {section.content}
+                </div>
+              </motion.div>
+            ))}
+          </div>
+
+          <motion.div
+            initial={{ opacity: 0 }}
+            whileInView={{ opacity: 1 }}
+            viewport={{ once: true }}
+            className="mt-12 p-8 rounded-2xl bg-gradient-to-r from-primary/10 to-primary/5 border border-primary/20 text-center"
+          >
+            <Scale className="w-8 h-8 text-primary mx-auto mb-3" />
+            <p className="text-sm text-muted-foreground max-w-lg mx-auto">
+              By continuing to use SOLEMATE, you acknowledge that you have read, understood, and agree to be bound by these Terms and Conditions.
+            </p>
+          </motion.div>
+        </div>
+      </section>
     </main>
   );
 };

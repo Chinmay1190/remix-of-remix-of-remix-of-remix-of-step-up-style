@@ -26,6 +26,7 @@ import PrivacyPolicy from "./pages/PrivacyPolicy";
 import Terms from "./pages/Terms";
 import FAQ from "./pages/FAQ";
 import Shipping from "./pages/Shipping";
+import HelpCenter from "./pages/HelpCenter";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -53,6 +54,7 @@ const AppLayout = () => {
         <Route path="/terms" element={<Terms />} />
         <Route path="/faq" element={<FAQ />} />
         <Route path="/shipping" element={<Shipping />} />
+        <Route path="/help" element={<HelpCenter />} />
         <Route path="*" element={<NotFound />} />
       </Routes>
       {!isAuthPage && <Footer />}
