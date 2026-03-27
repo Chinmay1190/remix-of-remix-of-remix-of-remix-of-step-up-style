@@ -14,6 +14,12 @@ const locationMap: Record<string, string> = {
   delivered: "Delivered to Address",
 };
 
+const descriptionMap: Record<string, string> = {
+  processing: "Order is being prepared",
+  shipped: "Order has been shipped",
+  delivered: "Order has been delivered",
+};
+
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
@@ -21,7 +27,7 @@ Deno.serve(async (req) => {
 
   try {
     const authHeader = req.headers.get("Authorization");
-    if (!authHeader) {
+    if (!authHeader?.startsWith("Bearer ")) {
       return new Response(JSON.stringify({ error: "Unauthorized" }), {
         status: 401,
         headers: { ...corsHeaders, "Content-Type": "application/json" },
@@ -29,31 +35,38 @@ Deno.serve(async (req) => {
     }
 
     const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
-    const supabaseKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
-    const supabase = createClient(supabaseUrl, supabaseKey);
+    const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
+    const anonKey = Deno.env.get("SUPABASE_ANON_KEY")!;
 
-    // Verify user
-    const anonClient = createClient(supabaseUrl, Deno.env.get("SUPABASE_PUBLISHABLE_KEY")!);
-    const { data: { user }, error: authError } = await anonClient.auth.getUser(authHeader.replace("Bearer ", ""));
-    if (authError || !user) {
+    // Verify user via getClaims
+    const authClient = createClient(supabaseUrl, anonKey, {
+      global: { headers: { Authorization: authHeader } },
+    });
+    const token = authHeader.replace("Bearer ", "");
+    const { data: claimsData, error: claimsError } = await authClient.auth.getClaims(token);
+    if (claimsError || !claimsData?.claims) {
       return new Response(JSON.stringify({ error: "Unauthorized" }), {
         status: 401,
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
+    const userId = claimsData.claims.sub;
 
     const { order_id } = await req.json();
+
+    // Use service role client for DB operations (bypasses RLS)
+    const supabase = createClient(supabaseUrl, serviceKey);
 
     // Fetch order
     const { data: order, error: orderError } = await supabase
       .from("orders")
       .select("*")
       .eq("id", order_id)
-      .eq("user_id", user.id)
+      .eq("user_id", userId)
       .single();
 
     if (orderError || !order) {
-      return new Response(JSON.stringify({ error: "Order not found" }), {
+      return new Response(JSON.stringify({ error: "Order not found", details: orderError?.message }), {
         status: 404,
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
@@ -69,8 +82,9 @@ Deno.serve(async (req) => {
 
     const nextStatus = statusFlow[currentIdx + 1];
     const location = locationMap[nextStatus] || null;
+    const description = descriptionMap[nextStatus] || `Order status updated to ${nextStatus}`;
 
-    // Update order status (trigger will auto-create tracking entry)
+    // Update order status
     const { error: updateError } = await supabase
       .from("orders")
       .update({ status: nextStatus })
@@ -78,16 +92,13 @@ Deno.serve(async (req) => {
 
     if (updateError) throw updateError;
 
-    // Update location on the tracking entry
-    if (location) {
-      // Small delay to let trigger fire
-      await new Promise((r) => setTimeout(r, 500));
-      await supabase
-        .from("order_tracking")
-        .update({ location })
-        .eq("order_id", order_id)
-        .eq("status", nextStatus);
-    }
+    // Directly insert tracking entry (in case trigger doesn't fire)
+    await supabase.from("order_tracking").insert({
+      order_id,
+      status: nextStatus,
+      description,
+      location,
+    });
 
     return new Response(
       JSON.stringify({ message: `Order advanced to ${nextStatus}`, status: nextStatus }),
