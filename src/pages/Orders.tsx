@@ -1,10 +1,12 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { Package, Clock, CheckCircle, Truck, ArrowLeft, Download, MapPin, FileText, Calendar, Box, ChevronDown, RefreshCw, ShieldCheck, CircleDot } from "lucide-react";
+import { Package, Clock, CheckCircle, Truck, ArrowLeft, Download, MapPin, FileText, Calendar, Box, ChevronDown, RefreshCw, ShieldCheck, CircleDot, Play, Loader2, Bell } from "lucide-react";
 import { Link, useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { formatPrice } from "@/lib/currency";
+import { toast } from "sonner";
+import { Progress } from "@/components/ui/progress";
 
 interface OrderItem {
   id: string;
@@ -43,10 +45,10 @@ interface Order {
 }
 
 const statusConfig = {
-  pending: { icon: Clock, color: "text-yellow-500", bg: "bg-yellow-500/10", border: "border-yellow-500/20", label: "Pending" },
-  processing: { icon: Package, color: "text-blue-500", bg: "bg-blue-500/10", border: "border-blue-500/20", label: "Processing" },
-  shipped: { icon: Truck, color: "text-purple-500", bg: "bg-purple-500/10", border: "border-purple-500/20", label: "Shipped" },
-  delivered: { icon: CheckCircle, color: "text-green-500", bg: "bg-green-500/10", border: "border-green-500/20", label: "Delivered" },
+  pending: { icon: Clock, color: "text-yellow-500", bg: "bg-yellow-500/10", border: "border-yellow-500/20", label: "Order Placed", desc: "Your order has been confirmed" },
+  processing: { icon: Package, color: "text-blue-500", bg: "bg-blue-500/10", border: "border-blue-500/20", label: "Processing", desc: "Being packed at our warehouse" },
+  shipped: { icon: Truck, color: "text-purple-500", bg: "bg-purple-500/10", border: "border-purple-500/20", label: "Shipped", desc: "On its way to you" },
+  delivered: { icon: CheckCircle, color: "text-green-500", bg: "bg-green-500/10", border: "border-green-500/20", label: "Delivered", desc: "Successfully delivered" },
 };
 
 const statusOrder = ["pending", "processing", "shipped", "delivered"];
@@ -167,6 +169,331 @@ const downloadInvoice = (order: Order, userName: string) => {
   URL.revokeObjectURL(url);
 };
 
+const getTimeAgo = (dateStr: string) => {
+  const now = new Date();
+  const date = new Date(dateStr);
+  const diffMs = now.getTime() - date.getTime();
+  const diffMins = Math.floor(diffMs / 60000);
+  const diffHours = Math.floor(diffMins / 60);
+  const diffDays = Math.floor(diffHours / 24);
+  if (diffDays > 0) return `${diffDays}d ago`;
+  if (diffHours > 0) return `${diffHours}h ago`;
+  if (diffMins > 0) return `${diffMins}m ago`;
+  return "Just now";
+};
+
+const TrackingTab = ({ order, onSimulate, simulating }: { order: Order; onSimulate: () => void; simulating: boolean }) => {
+  const currentIdx = statusOrder.indexOf(order.status);
+  const progressPercent = Math.round(((currentIdx + 1) / statusOrder.length) * 100);
+  const orderDate = new Date(order.created_at);
+  const estimatedDelivery = new Date(orderDate);
+  estimatedDelivery.setDate(estimatedDelivery.getDate() + (order.status === "delivered" ? 0 : order.status === "shipped" ? 2 : order.status === "processing" ? 5 : 7));
+  const currentStatus = statusConfig[order.status as keyof typeof statusConfig] || statusConfig.pending;
+  const isDelivered = order.status === "delivered";
+
+  return (
+    <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="space-y-5">
+      {/* Status Summary Card */}
+      <div className="p-5 rounded-2xl bg-background/50 border border-border relative overflow-hidden">
+        {/* Subtle gradient background */}
+        <div className="absolute inset-0 bg-gradient-to-br from-primary/[0.02] to-transparent pointer-events-none" />
+
+        {/* Top info row */}
+        <div className="flex items-center justify-between mb-5 relative">
+          <div className="flex items-center gap-3">
+            <div className={`w-12 h-12 rounded-xl ${currentStatus.bg} flex items-center justify-center`}>
+              <currentStatus.icon className={`w-6 h-6 ${currentStatus.color}`} />
+            </div>
+            <div>
+              <p className="font-display font-bold">{currentStatus.label}</p>
+              <p className="text-xs text-muted-foreground">{currentStatus.desc}</p>
+            </div>
+          </div>
+          <div className="text-right">
+            <p className="font-display font-bold text-3xl text-primary">{progressPercent}%</p>
+            <p className="text-[10px] text-muted-foreground uppercase tracking-wider font-semibold">Complete</p>
+          </div>
+        </div>
+
+        {/* Estimated delivery */}
+        <div className="flex items-center gap-2 mb-4 px-3 py-2 rounded-xl bg-muted/50">
+          <Calendar className="w-4 h-4 text-primary flex-shrink-0" />
+          <p className="text-sm">
+            <span className="text-muted-foreground">{isDelivered ? "Delivered on " : "Estimated delivery: "}</span>
+            <span className="font-semibold">
+              {estimatedDelivery.toLocaleDateString("en-IN", { weekday: "short", month: "short", day: "numeric", year: "numeric" })}
+            </span>
+          </p>
+        </div>
+
+        {/* Animated progress bar */}
+        <div className="relative h-3 w-full rounded-full bg-muted overflow-hidden mb-6">
+          <motion.div
+            initial={{ width: 0 }}
+            animate={{ width: `${progressPercent}%` }}
+            transition={{ duration: 1.2, ease: "easeOut" }}
+            className="absolute inset-y-0 left-0 rounded-full bg-gradient-to-r from-primary to-primary/80"
+          />
+          {!isDelivered && (
+            <motion.div
+              animate={{ opacity: [0.3, 0.8, 0.3] }}
+              transition={{ duration: 1.5, repeat: Infinity }}
+              className="absolute inset-y-0 rounded-full bg-primary/40"
+              style={{ left: `${Math.max(0, progressPercent - 6)}%`, width: "6%" }}
+            />
+          )}
+        </div>
+
+        {/* Status stepper */}
+        <div className="grid grid-cols-4 gap-0 relative">
+          {/* Connecting line */}
+          <div className="absolute top-5 left-[12.5%] right-[12.5%] h-0.5 bg-muted z-0">
+            <motion.div
+              initial={{ width: 0 }}
+              animate={{ width: `${Math.max(0, (currentIdx / (statusOrder.length - 1)) * 100)}%` }}
+              transition={{ duration: 1, ease: "easeOut" }}
+              className="h-full bg-primary"
+            />
+          </div>
+
+          {statusOrder.map((s, i) => {
+            const cfg = statusConfig[s as keyof typeof statusConfig];
+            const Icon = cfg.icon;
+            const isCompleted = i < currentIdx;
+            const isActive = i === currentIdx;
+
+            return (
+              <div key={s} className="flex flex-col items-center text-center relative z-10">
+                <motion.div
+                  initial={false}
+                  animate={{
+                    scale: isActive ? 1.1 : 1,
+                    boxShadow: isActive ? "0 0 0 6px hsla(var(--primary) / 0.15)" : "0 0 0 0px transparent",
+                  }}
+                  className={`w-10 h-10 rounded-full flex items-center justify-center mb-2 transition-colors relative border-2 ${
+                    isActive ? "bg-primary text-primary-foreground border-primary" :
+                    isCompleted ? "bg-primary/20 text-primary border-primary/30" :
+                    "bg-background text-muted-foreground border-border"
+                  }`}
+                >
+                  {isCompleted ? <CheckCircle className="w-5 h-5" /> : <Icon className="w-4 h-4" />}
+                  {isActive && !isDelivered && (
+                    <motion.span
+                      animate={{ scale: [1, 1.8, 1], opacity: [0.6, 0, 0.6] }}
+                      transition={{ duration: 2, repeat: Infinity }}
+                      className="absolute inset-0 rounded-full border-2 border-primary"
+                    />
+                  )}
+                </motion.div>
+                <span className={`text-[11px] font-semibold leading-tight ${
+                  isActive ? "text-primary" : isCompleted ? "text-foreground" : "text-muted-foreground"
+                }`}>
+                  {cfg.label}
+                </span>
+              </div>
+            );
+          })}
+        </div>
+      </div>
+
+      {/* Simulate Progress Button */}
+      {!isDelivered && (
+        <button
+          onClick={onSimulate}
+          disabled={simulating}
+          className="w-full flex items-center justify-center gap-2 px-5 py-3.5 rounded-xl bg-primary text-primary-foreground font-display font-semibold text-sm uppercase tracking-wider hover:scale-[1.02] transition-transform disabled:opacity-50 btn-primary-glow"
+        >
+          {simulating ? (
+            <>
+              <Loader2 className="w-4 h-4 animate-spin" />
+              Advancing Order Status...
+            </>
+          ) : (
+            <>
+              <Play className="w-4 h-4" />
+              Simulate Next Status Update
+            </>
+          )}
+        </button>
+      )}
+
+      {/* Live Tracking Timeline */}
+      {order.tracking && order.tracking.length > 0 ? (
+        <div className="p-5 rounded-2xl bg-background/50 border border-border">
+          <div className="flex items-center justify-between mb-5">
+            <h4 className="font-display font-bold flex items-center gap-2">
+              <CircleDot className="w-4 h-4 text-primary" />
+              Live Tracking
+            </h4>
+            <div className="flex items-center gap-1.5 text-xs text-muted-foreground bg-muted px-3 py-1.5 rounded-full">
+              <RefreshCw className="w-3 h-3" />
+              <span>Real-time</span>
+              <span className="relative flex h-2 w-2 ml-1">
+                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-green-500 opacity-75"></span>
+                <span className="relative inline-flex rounded-full h-2 w-2 bg-green-500"></span>
+              </span>
+            </div>
+          </div>
+
+          <div className="space-y-0 relative ml-1">
+            {[...order.tracking].reverse().map((event, i) => {
+              const isFirst = i === 0;
+              const isLast = i === order.tracking!.length - 1;
+              const eventStatus = statusConfig[event.status as keyof typeof statusConfig];
+              const EventIcon = eventStatus?.icon || Clock;
+              const eventDate = new Date(event.created_at);
+
+              return (
+                <div key={event.id} className="flex gap-4 relative">
+                  <div className="flex flex-col items-center">
+                    <motion.div
+                      initial={{ scale: 0, opacity: 0 }}
+                      animate={{ scale: 1, opacity: 1 }}
+                      transition={{ delay: i * 0.1, type: "spring", stiffness: 200 }}
+                      className={`w-10 h-10 rounded-full flex items-center justify-center flex-shrink-0 relative border-2 ${
+                        isFirst
+                          ? "bg-primary text-primary-foreground border-primary shadow-lg shadow-primary/20"
+                          : "bg-muted text-muted-foreground border-transparent"
+                      }`}
+                    >
+                      <EventIcon className="w-4 h-4" />
+                      {isFirst && !isDelivered && (
+                        <motion.span
+                          animate={{ scale: [1, 1.6, 1], opacity: [0.5, 0, 0.5] }}
+                          transition={{ duration: 2, repeat: Infinity }}
+                          className="absolute inset-0 rounded-full border-2 border-primary"
+                        />
+                      )}
+                    </motion.div>
+                    {!isLast && (
+                      <div className={`w-0.5 h-full min-h-[32px] ${isFirst ? "bg-primary/30" : "bg-border"}`} />
+                    )}
+                  </div>
+                  <motion.div
+                    initial={{ opacity: 0, x: -15 }}
+                    animate={{ opacity: 1, x: 0 }}
+                    transition={{ delay: i * 0.1 }}
+                    className={`pb-5 flex-1 ${isFirst ? "" : "opacity-60"}`}
+                  >
+                    <div className="flex items-start justify-between gap-2">
+                      <div>
+                        <p className={`font-semibold text-sm ${isFirst ? "text-foreground" : "text-muted-foreground"}`}>
+                          {event.description}
+                        </p>
+                        <div className="flex flex-wrap items-center gap-2 mt-1.5">
+                          <p className="text-xs text-muted-foreground">
+                            {eventDate.toLocaleDateString("en-IN", { month: "short", day: "numeric" })}
+                            {" • "}
+                            {eventDate.toLocaleTimeString("en-IN", { hour: "2-digit", minute: "2-digit" })}
+                          </p>
+                          {event.location && (
+                            <span className="text-xs text-muted-foreground flex items-center gap-1 bg-muted px-2.5 py-0.5 rounded-full">
+                              <MapPin className="w-3 h-3 text-primary" /> {event.location}
+                            </span>
+                          )}
+                        </div>
+                      </div>
+                      <span className={`text-[10px] font-semibold px-2.5 py-1 rounded-full whitespace-nowrap ${
+                        isFirst ? "bg-primary/10 text-primary" : "bg-muted text-muted-foreground"
+                      }`}>
+                        {getTimeAgo(event.created_at)}
+                      </span>
+                    </div>
+                  </motion.div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      ) : (
+        <div className="text-center py-12 rounded-2xl bg-background/50 border border-border">
+          <div className="relative w-16 h-16 mx-auto mb-4">
+            <Truck className="w-16 h-16 text-muted-foreground/20" />
+            <motion.div
+              animate={{ scale: [1, 1.3, 1], opacity: [0.3, 0.6, 0.3] }}
+              transition={{ duration: 2, repeat: Infinity }}
+              className="absolute -top-1 -right-1 w-5 h-5 rounded-full bg-primary/20 flex items-center justify-center"
+            >
+              <span className="w-2 h-2 rounded-full bg-primary" />
+            </motion.div>
+          </div>
+          <p className="font-display font-semibold">Waiting for tracking updates</p>
+          <p className="text-xs text-muted-foreground mt-1 max-w-xs mx-auto">Click "Simulate Next Status" to see real-time tracking in action.</p>
+        </div>
+      )}
+
+      {/* Notification + Secure notes */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+        <div className="flex items-center gap-2 px-4 py-3 rounded-xl bg-muted/50 border border-border">
+          <Bell className="w-4 h-4 text-primary flex-shrink-0" />
+          <p className="text-[11px] text-muted-foreground">Real-time notifications enabled for this order.</p>
+        </div>
+        <div className="flex items-center gap-2 px-4 py-3 rounded-xl bg-muted/50 border border-border">
+          <ShieldCheck className="w-4 h-4 text-primary flex-shrink-0" />
+          <p className="text-[11px] text-muted-foreground">Tracked securely with end-to-end encryption.</p>
+        </div>
+      </div>
+    </motion.div>
+  );
+};
+
+const DetailsTab = ({ order }: { order: Order }) => (
+  <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }}>
+    <div className="space-y-3">
+      {order.items?.map((item) => (
+        <div key={item.id} className="flex items-center gap-4 p-3 rounded-xl bg-background/50 hover:bg-background transition-colors">
+          <div className="w-16 h-16 rounded-xl overflow-hidden bg-muted flex-shrink-0">
+            <img src={item.product_image || "/placeholder.svg"} alt={item.product_name} className="w-full h-full object-cover" />
+          </div>
+          <div className="flex-1 min-w-0">
+            <p className="font-semibold truncate">{item.product_name}</p>
+            <p className="text-sm text-muted-foreground">Size {item.size} • {item.color} • Qty {item.quantity}</p>
+          </div>
+          <p className="font-display font-bold text-lg flex-shrink-0">{formatPrice(Number(item.price))}</p>
+        </div>
+      ))}
+    </div>
+
+    {/* Price Breakdown */}
+    <div className="mt-4 p-4 rounded-xl bg-background/50 border border-border space-y-2">
+      {(() => {
+        const subtotal = order.items?.reduce((s, i) => s + i.price * i.quantity, 0) || 0;
+        const gst = Math.round(subtotal * 0.18);
+        const grandTotal = Number(order.total);
+        const shippingCost = Math.max(0, grandTotal - subtotal - gst);
+        return (
+          <>
+            <div className="flex justify-between text-sm text-muted-foreground">
+              <span>Subtotal</span><span>{formatPrice(subtotal)}</span>
+            </div>
+            <div className="flex justify-between text-sm text-muted-foreground">
+              <span>GST (18%)</span><span>{formatPrice(gst)}</span>
+            </div>
+            <div className="flex justify-between text-sm text-muted-foreground">
+              <span>Shipping</span><span>{shippingCost > 0 ? formatPrice(shippingCost) : <span className="text-green-500 font-medium">Free</span>}</span>
+            </div>
+            <div className="flex justify-between pt-2 border-t border-border font-display font-bold">
+              <span>Grand Total</span><span>{formatPrice(grandTotal)}</span>
+            </div>
+          </>
+        );
+      })()}
+    </div>
+
+    {order.shipping_address && (
+      <div className="mt-4 p-4 rounded-xl bg-background/50 border border-border">
+        <div className="flex items-center gap-2 mb-2">
+          <MapPin className="w-4 h-4 text-primary" />
+          <p className="text-sm font-semibold">Shipping Address</p>
+        </div>
+        <p className="text-sm text-muted-foreground ml-6">
+          {order.shipping_address.street}, {order.shipping_address.city}, {order.shipping_address.state} {order.shipping_address.zip}, {order.shipping_address.country}
+        </p>
+      </div>
+    )}
+  </motion.div>
+);
+
 const Orders = () => {
   const { user, loading: authLoading } = useAuth();
   const navigate = useNavigate();
@@ -174,21 +501,9 @@ const Orders = () => {
   const [loading, setLoading] = useState(true);
   const [expandedOrder, setExpandedOrder] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState<"details" | "tracking">("details");
+  const [simulating, setSimulating] = useState<string | null>(null);
 
-  useEffect(() => {
-    if (!authLoading && !user) { navigate("/auth"); return; }
-    if (user) {
-      fetchOrders();
-      const channel = supabase
-        .channel('orders')
-        .on('postgres_changes', { event: '*', schema: 'public', table: 'orders', filter: `user_id=eq.${user.id}` }, () => fetchOrders())
-        .on('postgres_changes', { event: '*', schema: 'public', table: 'order_tracking' }, () => fetchOrders())
-        .subscribe();
-      return () => { supabase.removeChannel(channel); };
-    }
-  }, [user, authLoading, navigate]);
-
-  const fetchOrders = async () => {
+  const fetchOrders = useCallback(async () => {
     if (!user) return;
     const { data: ordersData, error } = await supabase.from("orders").select("*").eq("user_id", user.id).order("created_at", { ascending: false });
     if (error) { console.error("Error fetching orders:", error); return; }
@@ -214,6 +529,37 @@ const Orders = () => {
     );
     setOrders(ordersWithItems);
     setLoading(false);
+  }, [user]);
+
+  useEffect(() => {
+    if (!authLoading && !user) { navigate("/auth"); return; }
+    if (user) {
+      fetchOrders();
+      const channel = supabase
+        .channel('orders-realtime')
+        .on('postgres_changes', { event: '*', schema: 'public', table: 'orders', filter: `user_id=eq.${user.id}` }, () => fetchOrders())
+        .on('postgres_changes', { event: '*', schema: 'public', table: 'order_tracking' }, () => fetchOrders())
+        .subscribe();
+      return () => { supabase.removeChannel(channel); };
+    }
+  }, [user, authLoading, navigate, fetchOrders]);
+
+  const handleSimulate = async (orderId: string) => {
+    setSimulating(orderId);
+    try {
+      const { data, error } = await supabase.functions.invoke("simulate-order-progress", {
+        body: { order_id: orderId },
+      });
+      if (error) throw error;
+      toast.success(data?.message || "Order status updated!");
+      // Realtime will auto-refresh, but fetch immediately too
+      await fetchOrders();
+    } catch (err: any) {
+      console.error("Simulate error:", err);
+      toast.error("Failed to simulate. Please try again.");
+    } finally {
+      setSimulating(null);
+    }
   };
 
   if (authLoading || loading) {
@@ -326,9 +672,15 @@ const Orders = () => {
                             </button>
                             <button
                               onClick={() => setActiveTab("tracking")}
-                              className={`px-5 py-2.5 rounded-xl text-sm font-semibold transition-all ${activeTab === "tracking" ? "bg-primary text-primary-foreground shadow-md" : "bg-muted hover:bg-muted/80"}`}
+                              className={`px-5 py-2.5 rounded-xl text-sm font-semibold transition-all relative ${activeTab === "tracking" ? "bg-primary text-primary-foreground shadow-md" : "bg-muted hover:bg-muted/80"}`}
                             >
                               <Truck className="w-4 h-4 inline mr-1.5 -mt-0.5" /> Track Order
+                              {order.status !== "delivered" && (
+                                <span className="absolute -top-1 -right-1 flex h-3 w-3">
+                                  <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-green-500 opacity-75"></span>
+                                  <span className="relative inline-flex rounded-full h-3 w-3 bg-green-500"></span>
+                                </span>
+                              )}
                             </button>
                             <button
                               onClick={() => downloadInvoice(order, userName)}
@@ -338,281 +690,13 @@ const Orders = () => {
                             </button>
                           </div>
 
-                          {activeTab === "details" && (
-                            <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }}>
-                              <div className="space-y-3">
-                                {order.items?.map((item) => (
-                                  <div key={item.id} className="flex items-center gap-4 p-3 rounded-xl bg-background/50 hover:bg-background transition-colors">
-                                    <div className="w-16 h-16 rounded-xl overflow-hidden bg-muted flex-shrink-0">
-                                      <img src={item.product_image || "/placeholder.svg"} alt={item.product_name} className="w-full h-full object-cover" />
-                                    </div>
-                                    <div className="flex-1 min-w-0">
-                                      <p className="font-semibold truncate">{item.product_name}</p>
-                                      <p className="text-sm text-muted-foreground">Size {item.size} • {item.color} • Qty {item.quantity}</p>
-                                    </div>
-                                    <p className="font-display font-bold text-lg flex-shrink-0">{formatPrice(Number(item.price))}</p>
-                                  </div>
-                                ))}
-                              </div>
-
-                              {/* Price Breakdown */}
-                              <div className="mt-4 p-4 rounded-xl bg-background/50 border border-border space-y-2">
-                                {(() => {
-                                  const subtotal = order.items?.reduce((s, i) => s + i.price * i.quantity, 0) || 0;
-                                  const gst = Math.round(subtotal * 0.18);
-                                  const grandTotal = Number(order.total);
-                                  const shippingCost = Math.max(0, grandTotal - subtotal - gst);
-                                  return (
-                                    <>
-                                      <div className="flex justify-between text-sm text-muted-foreground">
-                                        <span>Subtotal</span><span>{formatPrice(subtotal)}</span>
-                                      </div>
-                                      <div className="flex justify-between text-sm text-muted-foreground">
-                                        <span>GST (18%)</span><span>{formatPrice(gst)}</span>
-                                      </div>
-                                      <div className="flex justify-between text-sm text-muted-foreground">
-                                        <span>Shipping</span><span>{shippingCost > 0 ? formatPrice(shippingCost) : <span className="text-green-500 font-medium">Free</span>}</span>
-                                      </div>
-                                      <div className="flex justify-between pt-2 border-t border-border font-display font-bold">
-                                        <span>Grand Total</span><span>{formatPrice(grandTotal)}</span>
-                                      </div>
-                                    </>
-                                  );
-                                })()}
-                              </div>
-
-                              {order.shipping_address && (
-                                <div className="mt-4 p-4 rounded-xl bg-background/50 border border-border">
-                                  <div className="flex items-center gap-2 mb-2">
-                                    <MapPin className="w-4 h-4 text-primary" />
-                                    <p className="text-sm font-semibold">Shipping Address</p>
-                                  </div>
-                                  <p className="text-sm text-muted-foreground ml-6">
-                                    {order.shipping_address.street}, {order.shipping_address.city}, {order.shipping_address.state} {order.shipping_address.zip}, {order.shipping_address.country}
-                                  </p>
-                                </div>
-                              )}
-                            </motion.div>
-                          )}
-
+                          {activeTab === "details" && <DetailsTab order={order} />}
                           {activeTab === "tracking" && (
-                            <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="space-y-5">
-                              {/* Status Summary Card */}
-                              {(() => {
-                                const currentIdx = statusOrder.indexOf(order.status);
-                                const progressPercent = Math.round(((currentIdx + 1) / statusOrder.length) * 100);
-                                const orderDate = new Date(order.created_at);
-                                const estimatedDelivery = new Date(orderDate);
-                                estimatedDelivery.setDate(estimatedDelivery.getDate() + (order.status === "delivered" ? 0 : order.status === "shipped" ? 2 : order.status === "processing" ? 5 : 7));
-                                const currentStatus = statusConfig[order.status as keyof typeof statusConfig] || statusConfig.pending;
-
-                                return (
-                                  <div className="p-5 rounded-2xl bg-background/50 border border-border">
-                                    {/* Top info row */}
-                                    <div className="flex items-center justify-between mb-5">
-                                      <div className="flex items-center gap-3">
-                                        <div className={`w-11 h-11 rounded-xl ${currentStatus.bg} flex items-center justify-center`}>
-                                          <currentStatus.icon className={`w-5 h-5 ${currentStatus.color}`} />
-                                        </div>
-                                        <div>
-                                          <p className="font-display font-bold text-sm">{currentStatus.label}</p>
-                                          <p className="text-xs text-muted-foreground">
-                                            {order.status === "delivered" ? "Delivered on " : "Est. delivery: "}
-                                            {estimatedDelivery.toLocaleDateString("en-IN", { month: "short", day: "numeric", year: "numeric" })}
-                                          </p>
-                                        </div>
-                                      </div>
-                                      <div className="text-right">
-                                        <p className="font-display font-bold text-2xl text-primary">{progressPercent}%</p>
-                                        <p className="text-xs text-muted-foreground">Complete</p>
-                                      </div>
-                                    </div>
-
-                                    {/* Animated progress bar */}
-                                    <div className="relative h-2.5 w-full rounded-full bg-muted overflow-hidden mb-6">
-                                      <motion.div
-                                        initial={{ width: 0 }}
-                                        animate={{ width: `${progressPercent}%` }}
-                                        transition={{ duration: 1, ease: "easeOut" }}
-                                        className="absolute inset-y-0 left-0 rounded-full bg-primary"
-                                      />
-                                      {order.status !== "delivered" && (
-                                        <motion.div
-                                          initial={{ opacity: 0 }}
-                                          animate={{ opacity: [0.4, 1, 0.4] }}
-                                          transition={{ duration: 1.5, repeat: Infinity }}
-                                          className="absolute inset-y-0 rounded-full bg-primary/30"
-                                          style={{ left: `${Math.max(0, progressPercent - 8)}%`, width: "8%" }}
-                                        />
-                                      )}
-                                    </div>
-
-                                    {/* Status stepper */}
-                                    <div className="grid grid-cols-4 gap-0">
-                                      {statusOrder.map((s, i) => {
-                                        const cfg = statusConfig[s as keyof typeof statusConfig];
-                                        const Icon = cfg.icon;
-                                        const isCompleted = i < currentIdx;
-                                        const isActive = i === currentIdx;
-                                        const isPending = i > currentIdx;
-
-                                        return (
-                                          <div key={s} className="flex flex-col items-center text-center relative">
-                                            <motion.div
-                                              initial={false}
-                                              animate={{
-                                                scale: isActive ? 1 : 1,
-                                                boxShadow: isActive ? "0 0 0 6px hsla(12, 90%, 58%, 0.15)" : "0 0 0 0px transparent",
-                                              }}
-                                              className={`w-10 h-10 rounded-full flex items-center justify-center mb-2 transition-colors relative ${
-                                                isActive ? "bg-primary text-primary-foreground" :
-                                                isCompleted ? "bg-primary/20 text-primary" :
-                                                "bg-muted text-muted-foreground"
-                                              }`}
-                                            >
-                                              {isCompleted ? <CheckCircle className="w-5 h-5" /> : <Icon className="w-4 h-4" />}
-                                              {isActive && order.status !== "delivered" && (
-                                                <motion.span
-                                                  animate={{ scale: [1, 1.8, 1], opacity: [0.6, 0, 0.6] }}
-                                                  transition={{ duration: 2, repeat: Infinity }}
-                                                  className="absolute inset-0 rounded-full border-2 border-primary"
-                                                />
-                                              )}
-                                            </motion.div>
-                                            <span className={`text-[11px] font-semibold leading-tight ${
-                                              isActive ? "text-primary" : isCompleted ? "text-foreground" : "text-muted-foreground"
-                                            }`}>
-                                              {cfg.label}
-                                            </span>
-                                          </div>
-                                        );
-                                      })}
-                                    </div>
-                                  </div>
-                                );
-                              })()}
-
-                              {/* Live Tracking Timeline */}
-                              {order.tracking && order.tracking.length > 0 ? (
-                                <div className="p-5 rounded-2xl bg-background/50 border border-border">
-                                  <div className="flex items-center justify-between mb-4">
-                                    <h4 className="font-display font-bold text-sm flex items-center gap-2">
-                                      <CircleDot className="w-4 h-4 text-primary" />
-                                      Tracking Timeline
-                                    </h4>
-                                    <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
-                                      <RefreshCw className="w-3 h-3" />
-                                      <span>Live updates</span>
-                                      <span className="relative flex h-2 w-2 ml-1">
-                                        <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-primary opacity-75"></span>
-                                        <span className="relative inline-flex rounded-full h-2 w-2 bg-primary"></span>
-                                      </span>
-                                    </div>
-                                  </div>
-
-                                  <div className="space-y-0 relative ml-1">
-                                    {[...order.tracking].reverse().map((event, i) => {
-                                      const isFirst = i === 0;
-                                      const isLast = i === order.tracking!.length - 1;
-                                      const eventStatus = statusConfig[event.status as keyof typeof statusConfig];
-                                      const EventIcon = eventStatus?.icon || Clock;
-                                      const eventDate = new Date(event.created_at);
-                                      const now = new Date();
-                                      const diffMs = now.getTime() - eventDate.getTime();
-                                      const diffMins = Math.floor(diffMs / 60000);
-                                      const diffHours = Math.floor(diffMins / 60);
-                                      const diffDays = Math.floor(diffHours / 24);
-                                      let timeAgo = "";
-                                      if (diffDays > 0) timeAgo = `${diffDays}d ago`;
-                                      else if (diffHours > 0) timeAgo = `${diffHours}h ago`;
-                                      else if (diffMins > 0) timeAgo = `${diffMins}m ago`;
-                                      else timeAgo = "Just now";
-
-                                      return (
-                                        <div key={event.id} className="flex gap-4 relative">
-                                          <div className="flex flex-col items-center">
-                                            <motion.div
-                                              initial={{ scale: 0, opacity: 0 }}
-                                              animate={{ scale: 1, opacity: 1 }}
-                                              transition={{ delay: i * 0.08 }}
-                                              className={`w-9 h-9 rounded-full flex items-center justify-center flex-shrink-0 relative ${
-                                                isFirst
-                                                  ? "bg-primary text-primary-foreground shadow-md"
-                                                  : "bg-muted text-muted-foreground"
-                                              }`}
-                                            >
-                                              <EventIcon className="w-4 h-4" />
-                                              {isFirst && order.status !== "delivered" && (
-                                                <motion.span
-                                                  animate={{ scale: [1, 1.6, 1], opacity: [0.5, 0, 0.5] }}
-                                                  transition={{ duration: 2, repeat: Infinity }}
-                                                  className="absolute inset-0 rounded-full border-2 border-primary"
-                                                />
-                                              )}
-                                            </motion.div>
-                                            {!isLast && (
-                                              <div className={`w-0.5 h-full min-h-[28px] ${isFirst ? "bg-primary/30" : "bg-muted-foreground/15"}`} />
-                                            )}
-                                          </div>
-                                          <motion.div
-                                            initial={{ opacity: 0, x: -15 }}
-                                            animate={{ opacity: 1, x: 0 }}
-                                            transition={{ delay: i * 0.08 }}
-                                            className={`pb-5 flex-1 ${isFirst ? "" : "opacity-70"}`}
-                                          >
-                                            <div className="flex items-start justify-between">
-                                              <div>
-                                                <p className={`font-semibold text-sm ${isFirst ? "text-foreground" : "text-muted-foreground"}`}>
-                                                  {event.description}
-                                                </p>
-                                                <div className="flex flex-wrap items-center gap-2 mt-1.5">
-                                                  <p className="text-xs text-muted-foreground">
-                                                    {eventDate.toLocaleDateString("en-IN", { month: "short", day: "numeric" })}
-                                                    {" • "}
-                                                    {eventDate.toLocaleTimeString("en-IN", { hour: "2-digit", minute: "2-digit" })}
-                                                  </p>
-                                                  {event.location && (
-                                                    <span className="text-xs text-muted-foreground flex items-center gap-1 bg-muted px-2 py-0.5 rounded-full">
-                                                      <MapPin className="w-3 h-3" /> {event.location}
-                                                    </span>
-                                                  )}
-                                                </div>
-                                              </div>
-                                              <span className={`text-[10px] font-medium px-2 py-0.5 rounded-full whitespace-nowrap ${
-                                                isFirst ? "bg-primary/10 text-primary" : "bg-muted text-muted-foreground"
-                                              }`}>
-                                                {timeAgo}
-                                              </span>
-                                            </div>
-                                          </motion.div>
-                                        </div>
-                                      );
-                                    })}
-                                  </div>
-                                </div>
-                              ) : (
-                                <div className="text-center py-10 rounded-2xl bg-background/50 border border-border">
-                                  <div className="relative w-16 h-16 mx-auto mb-4">
-                                    <Truck className="w-16 h-16 text-muted-foreground/20" />
-                                    <motion.div
-                                      animate={{ scale: [1, 1.3, 1], opacity: [0.3, 0.6, 0.3] }}
-                                      transition={{ duration: 2, repeat: Infinity }}
-                                      className="absolute -top-1 -right-1 w-5 h-5 rounded-full bg-primary/20 flex items-center justify-center"
-                                    >
-                                      <span className="w-2 h-2 rounded-full bg-primary" />
-                                    </motion.div>
-                                  </div>
-                                  <p className="font-display font-semibold text-sm">Waiting for tracking updates</p>
-                                  <p className="text-xs text-muted-foreground mt-1 max-w-xs mx-auto">We'll start updating once your order is picked up by our shipping partner.</p>
-                                </div>
-                              )}
-
-                              {/* Secure note */}
-                              <div className="flex items-center gap-2 px-4 py-3 rounded-xl bg-muted/50 border border-border">
-                                <ShieldCheck className="w-4 h-4 text-primary flex-shrink-0" />
-                                <p className="text-[11px] text-muted-foreground">Your order is tracked securely in real-time. Updates appear automatically as your package moves.</p>
-                              </div>
-                            </motion.div>
+                            <TrackingTab
+                              order={order}
+                              onSimulate={() => handleSimulate(order.id)}
+                              simulating={simulating === order.id}
+                            />
                           )}
                         </div>
                       </motion.div>
